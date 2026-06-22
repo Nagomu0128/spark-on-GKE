@@ -1,0 +1,9 @@
+# KSA for Spark driver/executor pods. The annotation binds it to the GSA for
+# Workload Identity (ADC). ${PROJECT_ID} is substituted by infra/k8s-bootstrap.sh.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spark
+  namespace: spark-jobs
+  annotations:
+    iam.gke.io/gcp-service-account: spark-gsa@${PROJECT_ID}.iam.gserviceaccount.com

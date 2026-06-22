@@ -31,7 +31,9 @@ Manual, because it precedes project/API setup and cannot live in Terraform:
 Component versions live in [`versions.env`](versions.env). Verify the latest
 before bumping.
 
-## Terraform (Phase 1)
+## Phase 1 — provision and connect
+
+GCP resources (Terraform):
 
 ```sh
 cd infra/terraform
@@ -41,13 +43,38 @@ terraform plan
 terraform apply
 ```
 
+In-cluster bootstrap (from `infra/`):
+
+```sh
+# PROJECT_ID/REGION/CLUSTER default to gcloud config / asia-northeast1 / spark-batch
+./k8s-bootstrap.sh      # credentials, namespaces, KSA(+WI annotation), RBAC
+./operator.sh           # Kubeflow Spark Operator via Helm
+
+# Smoke test (P1.12)
+kubectl apply -f ../manifests/spark-pi.yaml
+kubectl -n spark-jobs get sparkapplication spark-pi -w   # expect COMPLETED
+```
+
 ## Teardown — stop billing (P6.4)
+
+Full teardown (also deletes the data lake bucket — data is re-uploadable):
 
 ```sh
 cd infra/terraform
 terraform destroy
 ```
 
-`terraform destroy` removes exactly what was created (state-tracked), so no
-billable resources are left behind. In-cluster Helm releases are destroyed with
-the cluster; run `helm uninstall` first if you want explicit cleanup.
+To keep the data lake (and GSA/IAM/Artifact Registry) and only drop the
+expensive cluster — this honors the compute/storage separation (Design §6.1):
+
+```sh
+cd infra/terraform
+terraform destroy \
+  -target=google_container_node_pool.spark \
+  -target=google_container_node_pool.system \
+  -target=google_container_cluster.primary
+# recreate later with: terraform apply
+```
+
+`terraform destroy` removes exactly what is in state, so nothing bills silently.
+In-cluster Helm releases die with the cluster; `helm uninstall` first for explicit cleanup.
