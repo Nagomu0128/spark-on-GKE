@@ -21,6 +21,12 @@ variable "cluster_name" {
   default     = "spark-batch"
 }
 
+variable "zone" {
+  description = "Single zone to pin node pools to (regional cluster). Empty => <region>-a."
+  type        = string
+  default     = ""
+}
+
 variable "system_machine_type" {
   description = "Machine type for the on-demand system pool (Airflow/Operator/Driver)"
   type        = string
