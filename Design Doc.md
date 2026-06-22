@@ -151,11 +151,11 @@
 ### 6.1 ストレージ（GCS）
 
 - バケットは原則 1 つ（`gs://<project>-datalake`）、プレフィックスで層を分ける。  
-  - `raw/<dataset>/...`：投入そのまま（不変）。  
+  - `raw/<dataset>/dt=YYYY-MM-DD/...`：投入そのまま（不変）。**論理日付 `dt` でパーティション**し、ジョブはその日のスライスだけを読む（§8）。  
   - `staging/<job>/<run_date>/...`：書き込み途中・検証前の置き場（原子的 publish 用）。  
   - `curated/<table>/run_date=YYYY-MM-DD/...`：最終 Parquet（Hive 形式パーティション）。  
   - `spark-events/`：Spark イベントログ。  
-- **パーティション**：`run_date`（論理日付）を第一パーティションに。再実行・バックフィルの単位と一致させる。  
+- **パーティション**：入力 `raw/` は `dt`（論理日付）で、出力 `curated/` は同じ論理日付の `run_date` でパーティション。**`run_date` は「処理対象データの論理日付」であって「ジョブを実行した日」ではない**。再実行・バックフィルの単位と一致させる。  
 - **ファイルサイズ**：小ファイル乱立を避けるため、書き込み前に `repartition`/`coalesce` で 128〜256MB/ファイルを狙う。  
 - **圧縮**：Parquet \+ snappy（読み取り速度と圧縮率のバランス）。  
 - **選定理由**：計算とストレージを分離することで、クラスタを落としてもデータは残り、スケール 0 運用ができる。
@@ -187,7 +187,9 @@
 - Spark ジョブの起動は **`SparkKubernetesOperator`**（`apache-airflow-providers-cncf-kubernetes`）で SparkApplication を apply。完了待ちは provider のバージョンにより挙動が異なるため、**`SparkKubernetesSensor` の要否はインストールした provider 版で確認**する。  
 - **Cloud Composer ではなく自前**を選ぶ理由：JD の学習目的（Airflow の運用も自分で）に合わせる。トレードオフとして運用負荷は上がるが、学習効果が高い。  
 - **DAG 設計**：  
-  - `schedule="@daily"`、`catchup` はバックフィル方針に応じて設定。  
+  - `schedule="@daily"`。**バックフィルは `catchup=True`（`start_date` を妥当な過去日に設定）で自動実行**（§3.1）。意図しない大量実行は `max_active_runs` で抑制。  
+  - **同名 SparkApplication の衝突回避**：名前を `ds` でキーにするためリトライ・同日再実行で既存と衝突（AlreadyExists）しうる。apply 前に既存を delete してから作る（冪等 apply）か reconcile する provider 版を使い、`timeToLiveSeconds`（付録 D）GC 前の再実行で詰まらないよう operator の削除挙動を実機確認。  
+  - **多重起動の抑止**：Airflow 側にも `concurrencyPolicy: Forbid` 相当を置く（`max_active_runs=1`）。  
   - 論理日付 `{{ ds }}` を SparkApplication の引数・出力パーティションに伝播。  
   - リトライ：`retries=2`, `retry_delay=5min`（指数バックオフ可）。  
   - **タスクを冪等に**：同じ `ds` での再実行が安全（§8）であることが前提。
@@ -204,14 +206,14 @@ DAG: `kaggle_batch`（日次）
 
 | 順 | タスク | 役割 | 失敗時 |
 | :---- | :---- | :---- | :---- |
-| 1 | `ingest_check` | `raw/` に当日対象データが存在するか確認（無ければ取り込み or skip） | リトライ |
-| 2 | `spark_aggregate` | SparkApplication を apply し、集計 Parquet を `staging/` or `curated/` に出力 | リトライ（冪等なので安全） |
-| 3 | `validate_dq` | 出力の行数 \> 0、キー NULL 率 \< 閾値などを検証 | 失敗で停止（publish しない） |
-| 4 | `publish` | （staging 方式の場合）検証済み出力を `curated/` に原子的に昇格 | リトライ |
+| 1 | `ingest_check` | `raw/<dataset>/dt={{ ds }}/` に当日対象データが存在するか確認（無ければ取り込み or skip） | リトライ |
+| 2 | `spark_aggregate` | SparkApplication を apply し、集計 Parquet を **`staging/<job>/{{ ds }}/` に出力**（curated には直接書かない） | リトライ（冪等なので安全） |
+| 3 | `validate_dq` | **`staging/` の出力**を検証（行数 \> 0、キー NULL 率 \< 閾値 など） | 失敗で停止（**publish しない**→ curated は無傷） |
+| 4 | `publish` | 検証済み出力を `curated/<table>/run_date={{ ds }}/` に昇格し `_SUCCESS` を置く | リトライ |
 
-- **方式の選択**：  
-  - シンプル版 \= Spark が直接 `curated/.../run_date=ds/` に **動的パーティション上書き**（§8）。`publish` 不要。  
-  - 厳密版 \= いったん `staging/` に書き、DQ 合格後に `curated/` へ昇格（部分失敗を curated に出さない）。学習として両方試す価値あり。
+- **方式の選択（標準は staging→DQ→publish）**：  
+  - **標準形** \= Spark は `staging/` に書き、`validate_dq` が staging を検証、合格後に `publish` が `curated/` へ昇格して `_SUCCESS` を置く（**DQ を公開の前に置く**）。curated を読む側は `_SUCCESS` のあるパーティションだけ信頼する。  
+  - **シンプル版（ローカル/小データ限定）** \= Spark が直接 `curated/.../run_date={{ ds }}/` に動的パーティション上書き（§8）。DQ が公開後に走り curated に不正データが残りうるため、GKE 本線では使わない。
 
 ---
 
@@ -224,11 +226,12 @@ DAG: `kaggle_batch`（日次）
 1. **論理日付パーティション \+ 動的パーティション上書き**  
    - 出力は `curated/<table>/run_date=YYYY-MM-DD/`。  
    - Spark 設定 `spark.sql.sources.partitionOverwriteMode=dynamic` \+ `df.write.mode("overwrite").partitionBy("run_date")` により、**対象 run\_date のパーティションだけ**を置き換える（他日付は無傷）。→ 同じ日を何度流しても結果が一意。  
+   - **GCS 上の注意（重要）**：GCS の rename は「コピー＋削除」で**非原子的**。動的上書きは「一時ディレクトリ→対象パーティション削除→rename」で実装されるため、rename 途中の失敗で**対象パーティションが「削除済み・未書き込み」（その日のデータ消失）**になりうる。よって**動的上書き単独は冪等性の保証としない**。GKE 本線は下記 3 の staging→publish ＋ `_SUCCESS` とし、動的上書きはシンプル版（ローカル/小データ）に限定する。  
 2. **ビジネスキーでの重複排除**  
    - 取り込み段で重複が混じり得る場合、集計前に `dropDuplicates([business_key])`。または `groupBy` 自体が重複に強い形にする。  
-3. **原子的 publish（厳密版）**  
-   - `staging/<job>/<run_date>/` に書き切ってから、検証 OK で `curated/` に昇格。途中失敗を最終層に出さない。  
-   - `_SUCCESS` センチネルの存在で「完了済み」を判定し、二重処理をスキップできる。  
+3. **staging→publish ＋ `_SUCCESS` センチネル（GKE 上の本線）**  
+   - `staging/<job>/<run_date>/` に書き切り、DQ 合格後に `curated/` へ昇格（§7）。途中失敗を最終層に出さない。  
+   - 昇格完了で `curated/<table>/run_date=<ds>/_SUCCESS` を置き、**読み手は `_SUCCESS` のあるパーティションだけ信頼**する。これにより publish が非原子でも「中途半端を読ませない」を担保。`_SUCCESS` の有無で完了判定し、二重処理もスキップできる。  
 4. **Airflow タスクの再実行安全性**  
    - すべてのタスクは「同じ `ds` で再実行しても副作用が増えない」ように書く（追記ではなく上書き／存在チェック）。
 
@@ -349,11 +352,12 @@ DAG: `kaggle_batch`（日次）
 - ストレージは GCS（HDFS を本筋にしない）。  
 - 実行は Spark Operator（素 submit にしない）。  
 - オーケストレーションは自前 Airflow（Composer にしない）。  
-- 冪等性は「論理日付パーティション \+ 動的上書き」を基本線。
+- 冪等性は「論理日付パーティション ＋ staging→publish ＋ `_SUCCESS` センチネル」を基本線（GCS では動的上書き単独は非原子なため本線にしない）。  
+- バックフィルは Airflow `catchup=True` ＋ `max_active_runs=1` で自動実行。`run_date` は処理対象データの論理日付（実行日ではない）。
 
 **Open Questions**
 
-- 厳密な原子的 publish（staging→昇格）をどこまでやるか？ まずはシンプル版、学習で厳密版も試す。  
+- 原子的コミットの本筋として **テーブルフォーマット（Apache Iceberg / Delta Lake）** を導入すべきか？ これらは GCS 上でも**メタデータのポインタ swap による原子的コミット**を提供し、パーティション上書き・スナップショットを正しく扱える（§8 の根本解）。今回は学習スコープのため staging→publish ＋ `_SUCCESS` で回し、Iceberg は「次の一手」として保留。  
 - メタストア（Hive/BigLake）を入れるか？ 当面は非ゴール。  
 - スキューの本格チューニング（salting の自動化等）はどこまで？ 第一歩は「検知」に置く。
 
@@ -579,7 +583,7 @@ spec:
 
     "spark.sql.shuffle.partitions": "200"
 
-    "spark.sql.sources.partitionOverwriteMode": "dynamic"   \# 冪等の要
+    "spark.sql.sources.partitionOverwriteMode": "dynamic"   \# シンプル版/小データ用。GKE 本線は staging→publish（§8）
 
     "spark.eventLog.enabled": "true"
 
@@ -677,9 +681,13 @@ def main():
 
     LAKE \= "gs://PROJECT-datalake"
 
-    raw\_path \= f"{LAKE}/raw/events/"
+    \# 論理日付スライスだけ読む（対象データの日付。実行日ではない）
 
-    out\_path \= f"{LAKE}/curated/agg\_by\_category/"
+    raw\_path \= f"{LAKE}/raw/events/dt={args.run\_date}/"
+
+    \# 本線：staging に書き、DQ 合格後に publish タスクが curated へ昇格（§7・§8）
+
+    out\_path \= f"{LAKE}/staging/agg\_by\_category/"
 
     df \= (spark.read.option("header", True).option("inferSchema", True).csv(raw\_path))
 
@@ -699,11 +707,17 @@ def main():
 
     )
 
-    \# 小ファイル対策（必要に応じて repartition）
+    \# 出力（カテゴリ別集計）は小さいので少数ファイルに集約。大きい場合のみ
 
-    agg \= agg.repartition("run\_date")
+    \# サイズ見積りから N を決め repartition(N)。run\_date は全行同一値のため
 
-    \# 冪等：対象 run\_date パーティションだけを上書き（dynamic overwrite）
+    \# repartition("run\_date") は単一パーティション化してしまうので使わない。
+
+    agg \= agg.coalesce(1)
+
+    \# 冪等：staging の run\_date パーティションを上書き（再実行安全）。
+
+    \# curated への確定は publish タスク＋_SUCCESS センチネルで担保（§8）。
 
     (agg.write
 
@@ -741,7 +755,9 @@ from airflow import DAG
 
 from airflow.providers.cncf.kubernetes.operators.spark\_kubernetes import SparkKubernetesOperator
 
-\# provider 版により完了待ちの方法が異なる。必要なら SparkKubernetesSensor を併用
+\# provider 版により完了待ち/既存オブジェクトの扱いが異なる。完了待ちは SparkKubernetesSensor を併用。
+
+\# 同名 SparkApplication の再実行衝突は「apply 前に delete（冪等 apply）」で回避（§6.4）。要 provider 版確認。
 
 default\_args \= {"retries": 2, "retry\_delay": datetime.timedelta(minutes=5)}
 
@@ -753,7 +769,9 @@ with DAG(
 
     schedule="@daily",
 
-    catchup=False,
+    catchup=True,                 \# バックフィルを自動実行（§3.1）
+
+    max\_active\_runs=1,            \# 多重起動の抑止（concurrencyPolicy=Forbid 相当）
 
     default\_args=default\_args,
 
