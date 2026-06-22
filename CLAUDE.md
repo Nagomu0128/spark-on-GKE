@@ -1,7 +1,7 @@
 # spark-on-k8s
 
 A **personal learning project** building a daily batch platform with **Spark on Kubernetes + GCS + self-hosted Airflow** on GKE.
-`Design Doc.md` is the source of truth for the design. Read it first when in doubt (cited as §N below).
+`docs/Design Doc.md` is the source of truth for the design. Read it first when in doubt (cited as §N below).
 
 ## Development harness (YOU MUST)
 
@@ -10,7 +10,7 @@ A **personal learning project** building a daily batch platform with **Spark on 
 - **Confirm before destructive operations**: `git push --force`, `git reset --hard`, `gcloud ... delete` (clusters/buckets), `kubectl delete`.
 - Commit messages: concise imperative (e.g. `add staging-publish task to DAG`). One concern per commit.
 - **Verify before claiming done, and show evidence (the command and its output).** If you cannot verify it, do not say it works.
-- When the design changes, **update `Design Doc.md` in the same PR** so code and design stay in sync.
+- When the design changes, **update `docs/Design Doc.md` in the same PR** so code and design stay in sync.
 
 ## Secrets (IMPORTANT)
 
@@ -35,7 +35,8 @@ A **personal learning project** building a daily batch platform with **Spark on 
 - `dags/` — Airflow DAGs (§Appendix F)
 - `manifests/` — K8s YAML such as SparkApplication (§Appendix D)
 - `infra/` — gcloud / helm setup commands and scripts (§Appendix A, B)
-- `Design Doc.md` — the design source of truth
+- `docs/Design Doc.md` — the design source of truth
+- `docs/TASKS.md` — implementation task breakdown (phased)
 
 ## Verification (§12)
 
