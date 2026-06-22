@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars and edit. terraform.tfvars is gitignored.
+project_id = "my-gcp-project"
+region     = "asia-northeast1"
+
+# lake_bucket     = "my-gcp-project-datalake"  # default: <project_id>-datalake
+# cluster_name    = "spark-batch"
+# spark_max_nodes = 8
