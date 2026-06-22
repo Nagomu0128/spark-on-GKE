@@ -1,0 +1,23 @@
+import sys
+from pathlib import Path
+
+import pytest
+
+# Make jobs/ importable the same way the image does (spark-submit puts the app
+# file's dir on sys.path, so aggregate.py can `import schema`).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "jobs"))
+
+
+@pytest.fixture(scope="session")
+def spark():
+    from pyspark.sql import SparkSession
+
+    session = (
+        SparkSession.builder.master("local[*]")
+        .appName("tests")
+        .config("spark.sql.shuffle.partitions", "1")
+        .config("spark.ui.enabled", "false")
+        .getOrCreate()
+    )
+    yield session
+    session.stop()
