@@ -41,7 +41,7 @@ spec:
     serviceAccount: spark
   executor:
     cores: 2
-    instances: 3
+    instances: {{ params.executor_instances }}
     memory: "4g"
     serviceAccount: spark
     nodeSelector:

@@ -27,13 +27,14 @@ PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "REPLACE_ME")
 REGION = os.environ.get("GCP_REGION", "asia-northeast1")
 SPARK_VERSION = os.environ.get("SPARK_VERSION", "3.5.6")
 
-# (task_id, job python file). task_id doubles as the k8s name stem (underscores
-# -> hyphens in the template).
+# (task_id, job file, executor_instances). task_id doubles as the k8s name stem
+# (underscores -> hyphens in the template). ingest_check / validate_dq / publish do
+# little or driver-side work, so they don't need the aggregate's executor fan-out.
 JOBS = [
-    ("ingest_check", "ingest_check.py"),
-    ("aggregate", "aggregate.py"),
-    ("validate_dq", "validate_dq.py"),
-    ("publish", "publish.py"),
+    ("ingest_check", "ingest_check.py", 1),
+    ("aggregate", "aggregate.py", 3),
+    ("validate_dq", "validate_dq.py", 1),
+    ("publish", "publish.py", 1),
 ]
 
 default_args = {"retries": 2, "retry_delay": datetime.timedelta(minutes=5)}
@@ -50,7 +51,7 @@ with DAG(
     tags=["spark", "batch"],
 ) as dag:
     previous = None
-    for task_id, job_file in JOBS:
+    for task_id, job_file, executor_instances in JOBS:
         task = SparkKubernetesOperator(
             task_id=task_id,
             namespace="spark-jobs",
@@ -60,6 +61,7 @@ with DAG(
             params={
                 "job_name": task_id.replace("_", "-"),
                 "job_file": job_file,
+                "executor_instances": executor_instances,
                 "project_id": PROJECT_ID,
                 "region": REGION,
                 "spark_version": SPARK_VERSION,
