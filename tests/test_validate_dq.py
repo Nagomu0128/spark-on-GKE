@@ -18,10 +18,23 @@ def test_dq_fails_on_zero_rows(sample_events):
 
 
 def test_dq_fails_on_null_key(spark):
-    from pyspark.sql import Row
-
-    df = spark.createDataFrame(
-        [Row(category=None, cnt=1, total=1.0, run_date="2026-06-01")]
+    from pyspark.sql.types import (
+        DoubleType,
+        LongType,
+        StringType,
+        StructField,
+        StructType,
     )
+
+    # Explicit schema: an all-None column can't be type-inferred by createDataFrame.
+    schema = StructType(
+        [
+            StructField("category", StringType()),
+            StructField("cnt", LongType()),
+            StructField("total", DoubleType()),
+            StructField("run_date", StringType()),
+        ]
+    )
+    df = spark.createDataFrame([(None, 1, 1.0, "2026-06-01")], schema)
     with pytest.raises(ValueError, match="null rate"):
         validate_dq.run_checks(df, max_null_rate=0.0)
