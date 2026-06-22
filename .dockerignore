@@ -1,0 +1,4 @@
+# The image only needs jobs/ (COPY jobs/). Exclude everything else so the build
+# context stays tiny (esp. the gitignored infra/terraform/.terraform provider binary and .git).
+*
+!jobs

@@ -8,11 +8,15 @@ Design invariants:
 """
 import argparse
 import os
+import sys
 
-from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql import functions as F
+# Make sibling modules importable whether run by spark-submit or imported in tests.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from schema import BUSINESS_KEY, EVENTS_SCHEMA
+from pyspark.sql import DataFrame, SparkSession  # noqa: E402
+from pyspark.sql import functions as F  # noqa: E402
+
+from schema import BUSINESS_KEY, EVENTS_SCHEMA  # noqa: E402
 
 
 def raw_path(lake: str, run_date: str) -> str:
@@ -51,6 +55,9 @@ def main() -> None:
         df = (
             spark.read.schema(EVENTS_SCHEMA)
             .option("header", True)
+            # Validate the CSV header against the schema (fail fast on column drift)
+            # instead of the default positional mapping.
+            .option("enforceSchema", False)
             .csv(raw_path(args.lake, args.run_date))
         )
         agg = transform(df, args.run_date)
