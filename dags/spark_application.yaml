@@ -1,0 +1,57 @@
+# SparkApplication template rendered by Airflow (Jinja) for each task in
+# kaggle_batch.py. Mirrors manifests/sparkjob.yaml (which is the envsubst variant
+# for manual runs) — kept separate because the templating engines differ.
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: "{{ params.job_name }}-{{ ds_nodash }}"
+  namespace: spark-jobs
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  image: "{{ params.region }}-docker.pkg.dev/{{ params.project_id }}/spark/spark-gcs:{{ params.spark_version }}"
+  imagePullPolicy: IfNotPresent
+  mainApplicationFile: "local:///opt/spark/jobs/{{ params.job_file }}"
+  arguments:
+    - "--run-date"
+    - "{{ ds }}"
+    - "--lake"
+    - "gs://{{ params.project_id }}-datalake"
+  sparkVersion: "{{ params.spark_version }}"
+  timeToLiveSeconds: 86400
+  restartPolicy:
+    type: OnFailure
+    onFailureRetries: 3
+    onFailureRetryInterval: 30
+  sparkConf:
+    "spark.sql.adaptive.enabled": "true"
+    "spark.sql.adaptive.skewJoin.enabled": "true"
+    "spark.sql.adaptive.coalescePartitions.enabled": "true"
+    "spark.sql.shuffle.partitions": "200"
+    "spark.sql.sources.partitionOverwriteMode": "dynamic"
+    "spark.eventLog.enabled": "true"
+    "spark.eventLog.dir": "gs://{{ params.project_id }}-datalake/spark-events/"
+    "spark.hadoop.fs.gs.impl": "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem"
+    "spark.hadoop.fs.AbstractFileSystem.gs.impl": "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS"
+    "spark.hadoop.fs.gs.auth.type": "APPLICATION_DEFAULT"
+  driver:
+    cores: 1
+    memory: "2g"
+    serviceAccount: spark
+  executor:
+    cores: 2
+    instances: {{ params.executor_instances }}
+    memory: "4g"
+    serviceAccount: spark
+    nodeSelector:
+      workload: spark
+    tolerations:
+      - key: workload
+        operator: Equal
+        value: spark
+        effect: NoSchedule
+      - key: cloud.google.com/gke-spot
+        operator: Equal
+        value: "true"
+        effect: NoSchedule

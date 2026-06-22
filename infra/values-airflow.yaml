@@ -1,0 +1,23 @@
+# Airflow Helm values (P4.1). KubernetesExecutor + git-synced DAGs.
+executor: KubernetesExecutor
+
+# DAGs are pulled from this repo (public) so no image rebuild is needed to ship a DAG.
+dags:
+  gitSync:
+    enabled: true
+    repo: https://github.com/Nagomu0128/spark-on-GKE.git
+    branch: main
+    subPath: dags
+
+# The DAG reads these (project/region/image tag). REPLACE_ME before installing.
+env:
+  - name: GCP_PROJECT_ID
+    value: "REPLACE_ME"
+  - name: GCP_REGION
+    value: "asia-northeast1"
+  - name: SPARK_VERSION
+    value: "3.5.6"
+
+# Keep the learning install light. Postgres ships with the chart (fine for learning).
+redis:
+  enabled: false

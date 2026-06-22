@@ -1,0 +1,29 @@
+# Lets Airflow (KubernetesExecutor task pods, SA airflow-worker in ns airflow)
+# manage SparkApplications and watch driver pods in the spark-jobs namespace (P4.2).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: airflow-spark-submit
+  namespace: spark-jobs
+rules:
+  - apiGroups: ["sparkoperator.k8s.io"]
+    resources: ["sparkapplications", "sparkapplications/status"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: airflow-spark-submit
+  namespace: spark-jobs
+subjects:
+  # Match the SA the chart gives KubernetesExecutor task pods (verify the name).
+  - kind: ServiceAccount
+    name: airflow-worker
+    namespace: airflow
+roleRef:
+  kind: Role
+  name: airflow-spark-submit
+  apiGroup: rbac.authorization.k8s.io
