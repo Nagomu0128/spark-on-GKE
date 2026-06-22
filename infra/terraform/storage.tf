@@ -13,3 +13,11 @@ resource "google_storage_bucket" "lake" {
 
   depends_on = [google_project_service.enabled]
 }
+
+# Ensure the Spark event-log prefix exists so spark.eventLog.dir is valid on
+# first run (the GCS connector treats this object as a directory marker).
+resource "google_storage_bucket_object" "spark_events_prefix" {
+  name    = "spark-events/"
+  bucket  = google_storage_bucket.lake.name
+  content = " "
+}
