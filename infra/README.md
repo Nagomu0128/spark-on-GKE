@@ -10,9 +10,10 @@ for rationale.
 Manual, because it precedes project/API setup and cannot live in Terraform:
 
 1. Create or select a GCP project and link billing.
-2. Enable the Resource Manager API so Terraform can enable the rest:
+2. Enable the Resource Manager and Service Usage APIs so Terraform can enable the rest
+   (`google_project_service` needs Service Usage):
    ```sh
-   gcloud services enable cloudresourcemanager.googleapis.com --project <PROJECT_ID>
+   gcloud services enable cloudresourcemanager.googleapis.com serviceusage.googleapis.com --project <PROJECT_ID>
    ```
 3. Set a **budget alert** (Billing → Budgets & alerts). This is a learning project
    on a fixed credit — guard against runaway cost.
