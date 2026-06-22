@@ -1,0 +1,61 @@
+# Generic SparkApplication template for the batch jobs (aggregate | validate_dq | publish).
+# Rendered by infra/run-job.sh (envsubst). Placeholders:
+#   ${JOB_NAME} (k8s-safe name), ${JOB_FILE} (python file under /opt/spark/jobs),
+#   ${PROJECT_ID} ${REGION} ${SPARK_VERSION} ${RUN_DATE} ${RUN_DATE_NODASH}.
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: ${JOB_NAME}-${RUN_DATE_NODASH}
+  namespace: spark-jobs
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/spark/spark-gcs:${SPARK_VERSION}
+  imagePullPolicy: IfNotPresent
+  mainApplicationFile: local:///opt/spark/jobs/${JOB_FILE}
+  arguments:
+    - "--run-date"
+    - "${RUN_DATE}"
+    - "--lake"
+    - "gs://${PROJECT_ID}-datalake"
+  sparkVersion: "${SPARK_VERSION}"
+  timeToLiveSeconds: 86400 # auto-GC completed objects
+  restartPolicy:
+    type: OnFailure
+    onFailureRetries: 3
+    onFailureRetryInterval: 30
+  sparkConf:
+    "spark.sql.adaptive.enabled": "true"
+    "spark.sql.adaptive.skewJoin.enabled": "true"
+    "spark.sql.adaptive.coalescePartitions.enabled": "true"
+    "spark.sql.shuffle.partitions": "200"
+    "spark.sql.sources.partitionOverwriteMode": "dynamic"
+    "spark.eventLog.enabled": "true"
+    "spark.eventLog.dir": "gs://${PROJECT_ID}-datalake/spark-events/"
+    # GCS connector + Workload Identity (ADC).
+    "spark.hadoop.fs.gs.impl": "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem"
+    "spark.hadoop.fs.AbstractFileSystem.gs.impl": "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS"
+    "spark.hadoop.fs.gs.auth.type": "APPLICATION_DEFAULT"
+  driver:
+    cores: 1
+    memory: "2g"
+    serviceAccount: spark
+    # No spark/spot tolerations -> driver lands on the stable system pool.
+  executor:
+    cores: 2
+    instances: 3
+    memory: "4g"
+    serviceAccount: spark
+    nodeSelector:
+      workload: spark
+    tolerations:
+      - key: workload
+        operator: Equal
+        value: spark
+        effect: NoSchedule
+      # GKE auto-taints Spot nodes; tolerate it or executors stay Pending.
+      - key: cloud.google.com/gke-spot
+        operator: Equal
+        value: "true"
+        effect: NoSchedule

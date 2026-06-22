@@ -65,14 +65,28 @@ cd infra
 RUN_DATE=2026-06-01 ./ingest.sh ../tests/fixtures/events_sample.csv
 
 # run the aggregate job (writes staging/agg_by_category/run_date=<ds>/)
-RUN_DATE=2026-06-01 ./run-aggregate.sh
-kubectl -n spark-jobs get sparkapplication kaggle-agg-20260601 -w   # expect COMPLETED
+RUN_DATE=2026-06-01 ./run-job.sh aggregate
+kubectl -n spark-jobs get sparkapplication aggregate-20260601 -w   # expect COMPLETED
 
 # verify output
 gcloud storage ls "gs://$(gcloud config get-value project)-datalake/staging/agg_by_category/"
 ```
 
-Unit-test the transform locally (needs Java 17 + pyspark):
+## Phase 3 — DQ gate, publish, idempotency
+
+```sh
+cd infra
+RUN_DATE=2026-06-01 ./run-job.sh validate_dq   # fails (blocks publish) if checks breach
+RUN_DATE=2026-06-01 ./run-job.sh publish       # staging -> curated + _SUCCESS
+
+# only partitions with _SUCCESS are safe to read (promotion isn't atomic on GCS)
+gcloud storage ls "gs://$(gcloud config get-value project)-datalake/curated/agg_by_category/run_date=2026-06-01/"
+```
+
+Idempotency check (P3.3): run `aggregate` + `publish` for the same `RUN_DATE`
+twice and confirm the curated row count/content is unchanged.
+
+Unit-test the jobs locally (needs Java 17 + pyspark):
 
 ```sh
 pip install -r tests/requirements-dev.txt
