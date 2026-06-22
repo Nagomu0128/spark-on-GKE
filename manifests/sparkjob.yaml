@@ -1,10 +1,11 @@
-# Aggregate job (P2.5). Rendered by infra/run-aggregate.sh (envsubst) for a
-# manual run; Airflow renders its own copy in Phase 4. Placeholders:
-# ${PROJECT_ID} ${REGION} ${SPARK_VERSION} ${RUN_DATE} ${RUN_DATE_NODASH}.
+# Generic SparkApplication template for the batch jobs (aggregate | validate_dq | publish).
+# Rendered by infra/run-job.sh (envsubst). Placeholders:
+#   ${JOB_NAME} (k8s-safe name), ${JOB_FILE} (python file under /opt/spark/jobs),
+#   ${PROJECT_ID} ${REGION} ${SPARK_VERSION} ${RUN_DATE} ${RUN_DATE_NODASH}.
 apiVersion: sparkoperator.k8s.io/v1beta2
 kind: SparkApplication
 metadata:
-  name: kaggle-agg-${RUN_DATE_NODASH}
+  name: ${JOB_NAME}-${RUN_DATE_NODASH}
   namespace: spark-jobs
 spec:
   type: Python
@@ -12,7 +13,7 @@ spec:
   mode: cluster
   image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/spark/spark-gcs:${SPARK_VERSION}
   imagePullPolicy: IfNotPresent
-  mainApplicationFile: local:///opt/spark/jobs/aggregate.py
+  mainApplicationFile: local:///opt/spark/jobs/${JOB_FILE}
   arguments:
     - "--run-date"
     - "${RUN_DATE}"
