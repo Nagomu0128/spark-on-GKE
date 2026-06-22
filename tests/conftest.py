@@ -21,3 +21,21 @@ def spark():
     )
     yield session
     session.stop()
+
+
+# Shared fixture: e1 is duplicated to exercise dedup. After dedup -> books:{e1,e2},
+# music:{e3,e4} => books cnt=2 total=15.5, music cnt=2 total=10.0.
+SAMPLE_ROWS = [
+    ("e1", "books", 10.0),
+    ("e2", "books", 5.5),
+    ("e3", "music", 3.0),
+    ("e1", "books", 10.0),
+    ("e4", "music", 7.0),
+]
+
+
+@pytest.fixture
+def sample_events(spark):
+    from schema import EVENTS_SCHEMA
+
+    return spark.createDataFrame(SAMPLE_ROWS, schema=EVENTS_SCHEMA)
