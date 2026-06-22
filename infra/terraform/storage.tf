@@ -14,10 +14,17 @@ resource "google_storage_bucket" "lake" {
   depends_on = [google_project_service.enabled]
 }
 
-# Ensure the Spark event-log prefix exists so spark.eventLog.dir is valid on
-# first run (the GCS connector treats this object as a directory marker).
+# Ensure the Spark event-log directory exists so spark.eventLog.dir is valid on
+# first run (Spark requires eventLog.dir to pre-exist; it does not create it).
+#
+# Use a placeholder object *under* the prefix (spark-events/.keep), NOT an object
+# literally named "spark-events/". A "spark-events/" marker object collides with
+# the GCS connector's mkdirs: Spark's event-log writer calls mkdirs(spark-events/),
+# the connector tries to (re)create that exact marker with ifGenerationMatch=0,
+# and the pre-existing marker makes it fail with HTTP 412 Precondition Failed.
+# A child object makes spark-events/ an implicit directory, so mkdirs is a no-op.
 resource "google_storage_bucket_object" "spark_events_prefix" {
-  name    = "spark-events/"
+  name    = "spark-events/.keep"
   bucket  = google_storage_bucket.lake.name
   content = " "
 }
