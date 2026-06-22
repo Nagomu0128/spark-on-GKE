@@ -19,4 +19,9 @@ resource "google_service_account_iam_member" "spark_wi" {
   service_account_id = google_service_account.spark.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.spark_namespace}/${var.spark_ksa}]"
+
+  # The workload identity pool (PROJECT.svc.id.goog) only exists once the GKE
+  # cluster with workload_identity_config is created. Without this dependency the
+  # binding can run first and fail with "Identity Pool does not exist".
+  depends_on = [google_container_cluster.primary]
 }

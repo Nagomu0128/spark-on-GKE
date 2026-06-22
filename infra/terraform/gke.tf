@@ -18,6 +18,12 @@ resource "google_container_cluster" "primary" {
   networking_mode = "VPC_NATIVE"
   ip_allocation_policy {}
 
+  # Regional control plane for HA, but pin nodes to a single zone. Without this,
+  # the temporary default node pool spawns one node per zone (3 in
+  # asia-northeast1); 3 x 100GB pd-balanced boot disks exceed the 250GB
+  # SSD_TOTAL_GB quota and cluster creation fails.
+  node_locations = [local.zone]
+
   # Learning project — allow `terraform destroy` to remove the cluster.
   deletion_protection = false
 
@@ -37,6 +43,11 @@ resource "google_container_node_pool" "system" {
   node_config {
     machine_type = var.system_machine_type
     oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+
+    # pd-standard boot disk keeps nodes off the tight SSD_TOTAL_GB quota
+    # (pd-ssd/pd-balanced count against it; default is 250GB in asia-northeast1).
+    disk_type    = "pd-standard"
+    disk_size_gb = 50
 
     workload_metadata_config {
       mode = "GKE_METADATA"
@@ -61,6 +72,11 @@ resource "google_container_node_pool" "spark" {
     machine_type = var.spark_machine_type
     spot         = true
     oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+
+    # pd-standard boot disk so the pool can scale to several Spot nodes without
+    # exhausting the small SSD_TOTAL_GB quota (each node gets its own boot disk).
+    disk_type    = "pd-standard"
+    disk_size_gb = 100
 
     labels = {
       workload = "spark"
