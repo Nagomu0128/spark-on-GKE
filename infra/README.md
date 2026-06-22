@@ -55,6 +55,30 @@ kubectl apply -f ../manifests/spark-pi.yaml
 kubectl -n spark-jobs get sparkapplication spark-pi -w   # expect COMPLETED
 ```
 
+## Phase 2 — image & first transform
+
+```sh
+cd infra
+./image.sh                                   # build & push spark-gcs image to Artifact Registry
+
+# ingest a day's slice (sample fixture provided)
+RUN_DATE=2026-06-01 ./ingest.sh ../tests/fixtures/events_sample.csv
+
+# run the aggregate job (writes staging/agg_by_category/run_date=<ds>/)
+RUN_DATE=2026-06-01 ./run-aggregate.sh
+kubectl -n spark-jobs get sparkapplication kaggle-agg-20260601 -w   # expect COMPLETED
+
+# verify output
+gcloud storage ls "gs://$(gcloud config get-value project)-datalake/staging/agg_by_category/"
+```
+
+Unit-test the transform locally (needs Java 17 + pyspark):
+
+```sh
+pip install -r tests/requirements-dev.txt
+pytest tests/
+```
+
 ## Teardown — stop billing (P6.4)
 
 Full teardown (also deletes the data lake bucket — data is re-uploadable):
