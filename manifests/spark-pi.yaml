@@ -33,3 +33,8 @@ spec:
         operator: Equal
         value: spark
         effect: NoSchedule
+      # GKE auto-taints Spot node pools; pods must tolerate this or stay Pending.
+      - key: cloud.google.com/gke-spot
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
