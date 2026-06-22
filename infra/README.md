@@ -93,6 +93,28 @@ pip install -r tests/requirements-dev.txt
 pytest tests/
 ```
 
+## Phase 4 — orchestration (Airflow)
+
+```sh
+cd infra
+# edit values-airflow.yaml: set GCP_PROJECT_ID (and region) so the DAG can render
+./airflow.sh
+kubectl -n airflow port-forward svc/airflow-webserver 8080:8080   # UI at localhost:8080
+```
+
+The `kaggle_batch` DAG (git-synced from `dags/`) chains
+`ingest_check -> aggregate -> validate_dq -> publish`, propagating `{{ ds }}` to
+`--run-date`. `catchup=True` + `max_active_runs=1` give backfill without overlap.
+
+- Backfill a range (P4.4): `airflow dags backfill kaggle_batch -s 2026-06-01 -e 2026-06-03`.
+- Idempotency: re-run the same logical date; curated output stays unique.
+
+> The `SparkKubernetesOperator` API (`application_file` vs `template_spec`) and its
+> completion-wait behavior depend on the installed
+> `apache-airflow-providers-cncf-kubernetes` version — verify and adjust (add
+> `SparkKubernetesSensor` if the operator does not wait). The RBAC binding in
+> `manifests/airflow-spark-rbac.yaml` assumes the task SA is `airflow-worker`.
+
 ## Teardown — stop billing (P6.4)
 
 Full teardown (also deletes the data lake bucket — data is re-uploadable):
