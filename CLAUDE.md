@@ -34,9 +34,9 @@ A **personal learning project** building a daily batch platform with **Spark on 
 - `jobs/` — PySpark jobs (e.g. `aggregate.py`, §Appendix E)
 - `dags/` — Airflow DAGs (§Appendix F)
 - `manifests/` — K8s YAML such as SparkApplication (§Appendix D)
-- `infra/` — gcloud / helm setup commands and scripts (§Appendix A, B)
+- `infra/` — Terraform (GCP resources) under `infra/terraform/`, plus helm/kubectl setup scripts (§Appendix A, B)
 - `docs/Design Doc.md` — the design source of truth
-- `docs/TASKS.md` — implementation task breakdown (phased)
+- `docs/tasks.md` — implementation task breakdown (phased)
 
 ## Verification (§12)
 
