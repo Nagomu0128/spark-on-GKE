@@ -1,0 +1,28 @@
+# Secrets / credentials (never commit — auth is Workload Identity / ADC)
+*-key.json
+*.pem
+.env
+kubeconfig
+*.kubeconfig
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Terraform (commit .terraform.lock.hcl for reproducible provider versions)
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+!*.tfvars.example
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
