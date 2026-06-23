@@ -19,8 +19,12 @@ case salting targets directly.
 
 ## Run it
 
+The image bakes `jobs/`, so rebuild & push it first so `gen_skewed.py` and
+`aggregate.py --salt` are present in the image the SparkApplications pull:
+
 ```sh
 cd infra
+./image.sh                             # rebuild & push spark-gcs (bakes jobs/)
 RUN_DATE=2026-06-02 ./run-skew.sh      # use a date distinct from real data
 ```
 

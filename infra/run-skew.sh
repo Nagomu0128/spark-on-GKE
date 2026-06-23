@@ -6,6 +6,8 @@
 #   RUN_DATE=2026-06-02 ./run-skew.sh
 #
 # Use a RUN_DATE distinct from real data so the synthetic skew set is isolated.
+# Prerequisite: run ./image.sh first — the image bakes jobs/, so gen_skewed.py and
+# aggregate.py's --salt flag must be present in the pushed image.
 # Env: PROJECT_ID (default gcloud config), REGION (default asia-northeast1).
 # Generator size/skew come from jobs/gen_skewed.py defaults.
 set -euo pipefail
