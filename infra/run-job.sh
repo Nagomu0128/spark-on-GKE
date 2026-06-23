@@ -8,7 +8,7 @@ source ./versions.env
 
 JOB="${1:?usage: RUN_DATE=YYYY-MM-DD ./run-job.sh <aggregate|validate_dq|publish>}"
 case "${JOB}" in
-  aggregate | validate_dq | publish) ;;
+  aggregate | validate_dq | publish | gen_skewed) ;;
   *) echo "ERROR: unknown job '${JOB}'" >&2; exit 1 ;;
 esac
 

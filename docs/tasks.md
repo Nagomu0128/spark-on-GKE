@@ -97,10 +97,10 @@ GCP 資源は TF（`infra/terraform/`）に集約。クラスタ内は Helm/kube
 
 ## Phase 5 — スキュー再現と調整 ← P2（最低限）/ P4（理想）
 
-- [ ] **P5.1 偏りデータ生成** — 特定キーに偏ったデータを raw に投入。成果物：`jobs/gen_skewed.py`。
-- [ ] **P5.2 ベースライン計測** ← P5.1 — 対策前の wall-clock とタスク分布（max/median 比）を SHS で記録。
-- [ ] **P5.3 緩和と比較** ← P5.2 — AQE `skewJoin`/`coalescePartitions`、`shuffle.partitions` 調整、salting（全集計指標を二段で再構成）を適用し改善を計測。
-  - **DoD（Phase5 完了）**：対策前後の wall-clock 改善を SHS で確認。
+- [x] **P5.1 偏りデータ生成** — 特定キー（`hot`）に偏ったデータを raw に投入。成果物：`jobs/gen_skewed.py`。
+- [~] **P5.2 ベースライン計測** ← P5.1 — 対策前の wall-clock とタスク分布（max/median 比）を SHS で記録。ハーネス実装済み（`infra/run-skew.sh` が baseline `agg-salt1` を実行）。実測は SHS で（`docs/skew-experiment.md`）。
+- [~] **P5.3 緩和と比較** ← P5.2 — salting（`aggregate.py --salt N` の二段集計。結果不変はユニットテスト `test_transform_salted_matches_unsalted` で担保）、AQE 一式はマニフェストで有効。`infra/run-skew.sh` が `agg-salt16` を実行し比較可能に。
+  - **DoD（Phase5 完了）**：対策前後の wall-clock 改善を SHS で確認。手順 `docs/skew-experiment.md`。実測は実行時タスク。
 
 ---
 

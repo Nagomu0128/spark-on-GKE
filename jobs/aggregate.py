@@ -27,17 +27,34 @@ def staging_path(lake: str) -> str:
     return f"{lake}/staging/agg_by_category/"
 
 
-def transform(df: DataFrame, run_date: str) -> DataFrame:
-    """Pure transform (unit-tested): dedup -> group -> tag with run_date."""
-    return (
-        df.dropDuplicates([BUSINESS_KEY])
-        .groupBy("category")
-        .agg(
+def transform(df: DataFrame, run_date: str, salt: int = 1) -> DataFrame:
+    """Pure transform (unit-tested): dedup -> group -> tag with run_date.
+
+    salt > 1 enables a two-stage salted aggregation (Design §9): the group key is
+    split into `salt` random sub-groups to balance a skewed shuffle, then the
+    partials are summed back per category. The result is identical to salt=1.
+    """
+    deduped = df.dropDuplicates([BUSINESS_KEY])
+    if salt > 1:
+        agg = (
+            deduped.withColumn("_salt", (F.rand() * salt).cast("int"))
+            .groupBy("category", "_salt")
+            .agg(
+                F.count(F.lit(1)).alias("_cnt"),
+                F.sum(F.col("amount")).alias("_total"),
+            )
+            .groupBy("category")
+            .agg(
+                F.sum("_cnt").alias("cnt"),
+                F.sum("_total").alias("total"),
+            )
+        )
+    else:
+        agg = deduped.groupBy("category").agg(
             F.count(F.lit(1)).alias("cnt"),
             F.sum(F.col("amount")).alias("total"),
         )
-        .withColumn("run_date", F.lit(run_date))
-    )
+    return agg.withColumn("run_date", F.lit(run_date))
 
 
 def main() -> None:
@@ -45,6 +62,12 @@ def main() -> None:
     ap.add_argument("--run-date", required=True, help="logical date YYYY-MM-DD")
     ap.add_argument(
         "--lake", default=os.environ.get("LAKE"), help="gs://<bucket> (or env LAKE)"
+    )
+    ap.add_argument(
+        "--salt",
+        type=int,
+        default=1,
+        help="salt buckets for skew mitigation; 1 = off (Design §9)",
     )
     args = ap.parse_args()
     if not args.lake:
@@ -60,7 +83,7 @@ def main() -> None:
             .option("enforceSchema", False)
             .csv(raw_path(args.lake, args.run_date))
         )
-        agg = transform(df, args.run_date)
+        agg = transform(df, args.run_date, args.salt)
         # Aggregated output is small -> few files. partitionOverwriteMode=dynamic
         # (sparkConf) overwrites only the target run_date partition.
         (

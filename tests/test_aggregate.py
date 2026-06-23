@@ -23,3 +23,16 @@ def test_transform_is_idempotent(sample_events):
     first = sorted(tuple(r) for r in aggregate.transform(sample_events, "2026-06-01").collect())
     second = sorted(tuple(r) for r in aggregate.transform(sample_events, "2026-06-01").collect())
     assert first == second
+
+
+def test_transform_salted_matches_unsalted(sample_events):
+    # Salting (Design §9) must not change results, only the shuffle distribution.
+    base = {r["category"]: r for r in aggregate.transform(sample_events, "2026-06-01").collect()}
+    salted = {
+        r["category"]: r
+        for r in aggregate.transform(sample_events, "2026-06-01", salt=8).collect()
+    }
+    assert base.keys() == salted.keys()
+    for cat in base:
+        assert base[cat]["cnt"] == salted[cat]["cnt"]
+        assert abs(base[cat]["total"] - salted[cat]["total"]) < 1e-9
