@@ -1,0 +1,63 @@
+# Spark History Server (Phase 6, Design §11). Serves the Spark UI for finished
+# apps by reading event logs from gs://<lake>/spark-events/ — the main tool for
+# inspecting stages and task skew (Phase 5). Runs in spark-jobs so it uses the
+# `spark` KSA (Workload Identity -> GCS read). Run on demand, not permanently;
+# delete it when done to save cost. Rendered by infra/history-server.sh (envsubst):
+# ${PROJECT_ID} ${REGION} ${SPARK_VERSION}.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-history-server
+  namespace: spark-jobs
+  labels:
+    app: spark-history-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark-history-server
+  template:
+    metadata:
+      labels:
+        app: spark-history-server
+    spec:
+      serviceAccountName: spark # Workload Identity -> GCS read (ADC)
+      containers:
+        - name: history-server
+          image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/spark/spark-gcs:${SPARK_VERSION}
+          command:
+            - /opt/spark/bin/spark-class
+            - org.apache.spark.deploy.history.HistoryServer
+          ports:
+            - containerPort: 18080
+          env:
+            - name: SPARK_HISTORY_OPTS
+              value: >-
+                -Dspark.history.fs.logDirectory=gs://${PROJECT_ID}-datalake/spark-events/
+                -Dspark.hadoop.fs.gs.impl=com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem
+                -Dspark.hadoop.fs.AbstractFileSystem.gs.impl=com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS
+                -Dspark.hadoop.fs.gs.auth.type=APPLICATION_DEFAULT
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "1Gi"
+            limits:
+              memory: "2Gi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 18080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark-history-server
+  namespace: spark-jobs
+spec:
+  selector:
+    app: spark-history-server
+  ports:
+    - port: 18080
+      targetPort: 18080

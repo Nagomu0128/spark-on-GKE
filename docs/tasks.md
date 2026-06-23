@@ -106,11 +106,11 @@ GCP 資源は TF（`infra/terraform/`）に集約。クラスタ内は Helm/kube
 
 ## Phase 6 — 観測性とコスト ← P2
 
-- [ ] **P6.1 History Server** — `gs://.../spark-events/` を参照（常設せず必要時起動でコスト削減）。成果物：`manifests/history-server.yaml` or 起動手順。
-- [ ] **P6.2 Cloud Logging 確認** — driver/executor の stdout/stderr を確認できる状態。
-- [ ] **P6.3（任意）メトリクス** — Operator の Prometheus メトリクス + Grafana。
-- [ ] **P6.4 コストガードレール / teardown** — spark プールの 0 台縮退を確認。**破棄は `terraform destroy`**（GCP 資源を state 通り削除＝消し残しゼロ）。クラスタ削除でクラスタ内（Helm/kubectl）資源も消えるが、明示するなら先に `helm uninstall`。再作成は `terraform apply` → Helm/kubectl 再適用。成果物：`infra/teardown.md`（手順）。
-  - **DoD（Phase6 完了）**：アイドル時 spark ノード 0／`terraform destroy` 後に課金リソースが残らない（`gcloud ... list` で確認）。
+- [x] **P6.1 History Server** — `gs://.../spark-events/` を参照（常設せず必要時起動でコスト削減）。成果物：`manifests/history-server.yaml`, `infra/history-server.sh`（`up`/`delete`）、`docs/observability.md`。spark KSA で WI 経由 GCS 読み取り。
+- [x] **P6.2 Cloud Logging 確認** — driver/executor の stdout/stderr を確認する手順を文書化。成果物：`docs/observability.md`（`gcloud logging read` / `kubectl logs`）。
+- [~] **P6.3（任意）メトリクス** — Operator の Prometheus メトリクス + GMP/Grafana。任意のため文書化のみ（`docs/observability.md`）。
+- [x] **P6.4 コストガードレール / teardown** — spark プールの 0 台縮退、`terraform destroy` での消し残しゼロ、in-cluster の `helm uninstall` 順序、データ温存の部分 destroy を文書化。成果物：`infra/teardown.md`。
+  - **DoD（Phase6 完了）**：アイドル時 spark ノード 0／`terraform destroy` 後に課金リソースが残らない（`gcloud ... list` で確認）。手順 `infra/teardown.md`。
 
 ---
 
