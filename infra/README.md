@@ -115,26 +115,32 @@ The `kaggle_batch` DAG (git-synced from `dags/`) chains
 > `SparkKubernetesSensor` if the operator does not wait). The RBAC binding in
 > `manifests/airflow-spark-rbac.yaml` assumes the task SA is `airflow-worker`.
 
+## Phase 5 — skew reproduction + mitigation
+
+```sh
+cd infra
+./image.sh                          # rebuild image (bakes jobs/) if jobs changed
+RUN_DATE=2026-06-02 ./run-skew.sh   # gen skewed data -> baseline vs salted aggregate
+```
+
+Compare `agg-salt1-*` (skewed: one long-tail task) vs `agg-salt16-*` (salted:
+balanced) in the History Server. Salting (`aggregate.py --salt N`) is
+result-preserving (unit-tested). Details: `docs/skew-experiment.md`.
+
+## Phase 6 — observability & cost
+
+```sh
+cd infra
+./history-server.sh                 # on-demand Spark History Server
+kubectl -n spark-jobs port-forward svc/spark-history-server 18080:18080
+./history-server.sh delete          # stop when done
+```
+
+Stages → Tasks shows per-task skew; Cloud Logging holds driver/executor logs.
+See `docs/observability.md`.
+
 ## Teardown — stop billing (P6.4)
 
-Full teardown (also deletes the data lake bucket — data is re-uploadable):
-
-```sh
-cd infra/terraform
-terraform destroy
-```
-
-To keep the data lake (and GSA/IAM/Artifact Registry) and only drop the
-expensive cluster — this honors the compute/storage separation (Design §6.1):
-
-```sh
-cd infra/terraform
-terraform destroy \
-  -target=google_container_node_pool.spark \
-  -target=google_container_node_pool.system \
-  -target=google_container_cluster.primary
-# recreate later with: terraform apply
-```
-
-`terraform destroy` removes exactly what is in state, so nothing bills silently.
-In-cluster Helm releases die with the cluster; `helm uninstall` first for explicit cleanup.
+Nothing runs permanently. Stop in-cluster apps, confirm the spark pool scaled to
+0, and `terraform destroy` (full or cluster-only). Full runbook:
+**`infra/teardown.md`**.
