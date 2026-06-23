@@ -53,10 +53,14 @@ spec:
           resources:
             requests: { cpu: "250m", memory: "768Mi" }
             limits: { memory: "1536Mi" }
+          # All four site files: this pod is also the client used in the runbook
+          # to submit `yarn jar wordcount`, so it needs yarn/mapred config too.
           volumeMounts:
             - { name: name-dir, mountPath: /hadoop/dfs }
             - { name: hadoop-conf, mountPath: /opt/hadoop/etc/hadoop/core-site.xml, subPath: core-site.xml }
             - { name: hadoop-conf, mountPath: /opt/hadoop/etc/hadoop/hdfs-site.xml, subPath: hdfs-site.xml }
+            - { name: hadoop-conf, mountPath: /opt/hadoop/etc/hadoop/yarn-site.xml, subPath: yarn-site.xml }
+            - { name: hadoop-conf, mountPath: /opt/hadoop/etc/hadoop/mapred-site.xml, subPath: mapred-site.xml }
       volumes:
         - name: hadoop-conf
           configMap:
