@@ -21,3 +21,17 @@ env:
 # Keep the learning install light. Postgres ships with the chart (fine for learning).
 redis:
   enabled: false
+
+# Bitnami removed old versioned tags from docker.io/bitnami in 2025 (moved to the
+# bitnamilegacy mirror), so the chart's pinned postgres tag now 404s on Docker Hub.
+# Pull the same tag from bitnamilegacy to keep the bundled DB working.
+postgresql:
+  image:
+    repository: bitnamilegacy/postgresql
+
+# With `helm --wait`, running DB migrations as a post-install hook deadlocks: the
+# scheduler/webserver initContainers wait for migrations, but post-install hooks
+# only run after --wait finishes. Run the migration as a normal Job so it applies
+# during install and the initContainers can proceed.
+migrateDatabaseJob:
+  useHelmHooks: false

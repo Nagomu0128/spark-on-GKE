@@ -39,11 +39,18 @@ spec:
     cores: 1
     memory: "2g"
     serviceAccount: spark
+    # SparkKubernetesOperator (cncf.kubernetes provider) requires driver/executor
+    # labels to exist in the spec; it reads spec.driver.labels to locate the driver
+    # pod and KeyErrors if absent.
+    labels:
+      version: "{{ params.spark_version }}"
   executor:
     cores: 2
     instances: {{ params.executor_instances }}
     memory: "4g"
     serviceAccount: spark
+    labels:
+      version: "{{ params.spark_version }}"
     nodeSelector:
       workload: spark
     tolerations:
