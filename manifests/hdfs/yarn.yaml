@@ -1,0 +1,84 @@
+# Minimal YARN: 1 ResourceManager + 1 NodeManager (Phase 7, Design Appendix G),
+# enough to run a MapReduce wordcount. Learning only; delete after use.
+apiVersion: v1
+kind: Service
+metadata:
+  name: hdfs-yarn-rm
+  namespace: hdfs
+spec:
+  selector:
+    app: hdfs-yarn-rm
+  ports:
+    - { name: scheduler, port: 8030 }
+    - { name: tracker, port: 8031 } # NodeManager -> RM registration
+    - { name: client, port: 8032 }
+    - { name: web, port: 8088 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hdfs-yarn-rm
+  namespace: hdfs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hdfs-yarn-rm
+  template:
+    metadata:
+      labels:
+        app: hdfs-yarn-rm
+    spec:
+      containers:
+        - name: resourcemanager
+          image: apache/hadoop:3.3.6
+          command: ["/opt/hadoop/bin/yarn", "resourcemanager"]
+          ports:
+            - { containerPort: 8032 }
+            - { containerPort: 8088 }
+          resources:
+            requests: { cpu: "250m", memory: "768Mi" }
+            limits: { memory: "1536Mi" }
+          volumeMounts:
+            - { name: hadoop-conf, mountPath: /opt/hadoop/etc/hadoop/core-site.xml, subPath: core-site.xml }
+            - { name: hadoop-conf, mountPath: /opt/hadoop/etc/hadoop/hdfs-site.xml, subPath: hdfs-site.xml }
+            - { name: hadoop-conf, mountPath: /opt/hadoop/etc/hadoop/yarn-site.xml, subPath: yarn-site.xml }
+            - { name: hadoop-conf, mountPath: /opt/hadoop/etc/hadoop/mapred-site.xml, subPath: mapred-site.xml }
+      volumes:
+        - name: hadoop-conf
+          configMap:
+            name: hadoop-conf
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hdfs-yarn-nm
+  namespace: hdfs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hdfs-yarn-nm
+  template:
+    metadata:
+      labels:
+        app: hdfs-yarn-nm
+    spec:
+      containers:
+        - name: nodemanager
+          image: apache/hadoop:3.3.6
+          command: ["/opt/hadoop/bin/yarn", "nodemanager"]
+          # Pod must hold the NM JVM plus the YARN containers it launches
+          # (yarn.nodemanager.resource.memory-mb=4096).
+          resources:
+            requests: { cpu: "500m", memory: "1536Mi" }
+            limits: { memory: "5Gi" }
+          volumeMounts:
+            - { name: hadoop-conf, mountPath: /opt/hadoop/etc/hadoop/core-site.xml, subPath: core-site.xml }
+            - { name: hadoop-conf, mountPath: /opt/hadoop/etc/hadoop/hdfs-site.xml, subPath: hdfs-site.xml }
+            - { name: hadoop-conf, mountPath: /opt/hadoop/etc/hadoop/yarn-site.xml, subPath: yarn-site.xml }
+            - { name: hadoop-conf, mountPath: /opt/hadoop/etc/hadoop/mapred-site.xml, subPath: mapred-site.xml }
+      volumes:
+        - name: hadoop-conf
+          configMap:
+            name: hadoop-conf

@@ -116,7 +116,7 @@ GCP 資源は TF（`infra/terraform/`）に集約。クラスタ内は Helm/kube
 
 ## Phase 7（任意）— HDFS/YARN 学習モジュール（付録 G） ← 独立
 
-- [ ] **P7.1 最小 HDFS + MapReduce** — NameNode1 + DataNode1〜2 の StatefulSet、`hdfs dfs -put`、wordcount を YARN で1本。終わったら削除。成果物：`manifests/hdfs/`。DoD：put/get と MapReduce が1本通る。
+- [~] **P7.1 最小 HDFS + MapReduce** — NameNode1 + DataNode1 + RM + NM の最小構成、`hdfs dfs -put/-get`、wordcount を YARN で1本。成果物：`manifests/hdfs/`（configmap/hdfs/yarn + README）。マニフェスト・runbook 実装済み（スキーマ検証済み）。DoD（put/get と MapReduce 1本）は学習時の実行タスク。**任意・常設しない・終わったら削除**。
 
 ---
 
